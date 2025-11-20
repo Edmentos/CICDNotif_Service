@@ -7,9 +7,8 @@ logger = logging.getLogger(__name__)
 
 
 def send_welcome_email(to_email: str, name: str) -> None:
-    """Send a simple welcome email. Reads SMTP configuration from env vars.
-
-    Environment variables used:
+    """
+    Environment variables:
     - SMTP_HOST
     - SMTP_PORT
     - SMTP_USER
