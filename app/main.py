@@ -9,7 +9,6 @@ from app import schemas
 from app.email import send_welcome_email
 
 
-# Replacing @app.on_event("startup")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -22,7 +21,7 @@ app = FastAPI(lifespan=lifespan)
 # CORS (add this block)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # dev-friendly; tighten in prod
+    allow_origins=["*"],  
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -41,8 +40,8 @@ def create_user(user: schemas.UserCreate, background_tasks: BackgroundTasks, db:
     db.commit()
     db.refresh(db_user)
 
-    # send welcome email in background (no-op if SMTP not configured)
-    # schedule welcome email in background (no-op if SMTP not configured)
+    # send welcome email in background 
+    # schedules welcome email in background 
     try:
         background_tasks.add_task(send_welcome_email, db_user.email, db_user.name)
     except Exception:
