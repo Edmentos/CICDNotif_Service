@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import engine, get_db
 from app.models import Base, User as UserModel
 from app import schemas
-from app.email import send_welcome_email
+from app.email import send_welcome_email, send_goodbye_email
 
 
 @asynccontextmanager
@@ -52,10 +52,23 @@ def create_user(user: schemas.UserCreate, background_tasks: BackgroundTasks, db:
 
 
 @app.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(user_id: int, db: Session = Depends(get_db)):
+def delete_user(user_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Store user info before deletion
+    user_email = user.email
+    user_name = user.name
+    
     db.delete(user)
     db.commit()
+    
+    # Send goodbye email with feedback form in background
+    try:
+        background_tasks.add_task(send_goodbye_email, user_email, user_name)
+    except Exception:
+        # Scheduling failed; ignore so user deletion succeeds
+        pass
+    
     return Response(status_code=status.HTTP_204_NO_CONTENT)

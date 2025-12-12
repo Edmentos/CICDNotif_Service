@@ -58,3 +58,60 @@ def send_welcome_email(to_email: str, name: str) -> None:
         logger.info("Sent welcome email to %s", to_email)
     except Exception as exc:
         logger.exception("Failed to send welcome email to %s: %s", to_email, exc)
+
+
+def send_goodbye_email(to_email: str, name: str) -> None:
+    """
+    Send a goodbye email with a feedback form link when a user is deleted.
+    """
+    smtp_host = os.getenv("SMTP_HOST")
+    if not smtp_host:
+        logger.info("SMTP not configured; skipping goodbye email to %s", to_email)
+        return
+
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM") or smtp_user
+    use_ssl = os.getenv("SMTP_USE_SSL", "true").lower() == "true"
+    starttls = os.getenv("SMTP_STARTTLS", "false").lower() == "true"
+
+    subject = "We're sorry to see you go"
+    body = f"""Hello {name},
+
+We're sorry to see you leave Docu-Serve. Your account has been successfully deleted.
+
+We'd love to hear your feedback to help us improve our service. Please take a moment to fill out this brief survey:
+
+https://forms.cloud.microsoft/e/E5ZhG3hbqS
+
+Thank you for being part of our community.
+
+Kind regards,
+The Docu-Serve Team
+"""
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = smtp_from or "noreply@example.com"
+    msg["To"] = to_email
+    msg.set_content(body)
+
+    try:
+        if use_ssl:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as smtp:
+                if smtp_user and smtp_password:
+                    smtp.login(smtp_user, smtp_password)
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as smtp:
+                smtp.ehlo()
+                if starttls:
+                    smtp.starttls()
+                    smtp.ehlo()
+                if smtp_user and smtp_password:
+                    smtp.login(smtp_user, smtp_password)
+                smtp.send_message(msg)
+        logger.info("Sent goodbye email to %s", to_email)
+    except Exception as exc:
+        logger.exception("Failed to send goodbye email to %s: %s", to_email, exc)
