@@ -12,6 +12,7 @@ class User(BaseModel):
 	email: EmailStr
 	name: str
 	age: int
+	welcome_email_sent: bool
 
 	class Config:
 		orm_mode = True
