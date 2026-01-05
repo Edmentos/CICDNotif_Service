@@ -11,6 +11,25 @@ services:
       interval: 5s
       retries: 10
     restart: unless-stopped
+  
+  # RabbitMQ for receiving user events from other microservices
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"    # AMQP protocol
+      - "15672:15672"  # Management UI at http://localhost:15672
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
     
   api:
     build: .
@@ -20,9 +39,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     ports:
       - "8001:8000"
     restart: unless-stopped
     
 volumes:
   postgres-data: {}
+  rabbitmq-data: {}

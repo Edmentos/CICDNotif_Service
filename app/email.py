@@ -2,6 +2,8 @@ import os
 import logging
 import smtplib
 from email.message import EmailMessage
+from app.database import SessionLocal
+from app.models import Notification
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +58,41 @@ def send_welcome_email(to_email: str, name: str) -> None:
                     smtp.login(smtp_user, smtp_password)
                 smtp.send_message(msg)
         logger.info("Sent welcome email to %s", to_email)
+        
+        # Save notification to database so user can see their email history
+        db = SessionLocal()
+        try:
+            notification = Notification(
+                user_email=to_email,
+                notification_type="welcome",
+                subject=subject,
+                message=body,
+                delivered=True
+            )
+            db.add(notification)
+            db.commit()
+        except Exception as db_err:
+            logger.error(f"Failed to save notification: {db_err}")
+        finally:
+            db.close()
+            
     except Exception as exc:
         logger.exception("Failed to send welcome email to %s: %s", to_email, exc)
+        
+        # Save failed notification
+        db = SessionLocal()
+        try:
+            notification = Notification(
+                user_email=to_email,
+                notification_type="welcome",
+                subject=subject,
+                message=body,
+                delivered=False
+            )
+            db.add(notification)
+            db.commit()
+        finally:
+            db.close()
 
 
 def send_goodbye_email(to_email: str, name: str) -> None:
@@ -113,5 +148,38 @@ The Docu-Serve Team
                     smtp.login(smtp_user, smtp_password)
                 smtp.send_message(msg)
         logger.info("Sent goodbye email to %s", to_email)
+        
+        # Save notification to database
+        db = SessionLocal()
+        try:
+            notification = Notification(
+                user_email=to_email,
+                notification_type="goodbye",
+                subject=subject,
+                message=body,
+                delivered=True
+            )
+            db.add(notification)
+            db.commit()
+        except Exception as db_err:
+            logger.error(f"Failed to save notification: {db_err}")
+        finally:
+            db.close()
+            
     except Exception as exc:
         logger.exception("Failed to send goodbye email to %s: %s", to_email, exc)
+        
+        # Save failed notification
+        db = SessionLocal()
+        try:
+            notification = Notification(
+                user_email=to_email,
+                notification_type="goodbye",
+                subject=subject,
+                message=body,
+                delivered=False
+            )
+            db.add(notification)
+            db.commit()
+        finally:
+            db.close()

@@ -2,14 +2,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status, Response, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from typing import List
 import asyncio
 import threading
 import logging
+import os
 
 from app.database import engine, get_db, SessionLocal
-from app.models import Base, User as UserModel, DeletedUser
+from app.models import Base, User as UserModel, DeletedUser, Notification
 from app import schemas
 from app.email import send_welcome_email, send_goodbye_email
+from app.rabbitmq import check_rabbitmq_connection
+from app.worker import start_consumer
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +88,18 @@ async def lifespan(app: FastAPI):
     # Create tables
     Base.metadata.create_all(bind=engine)
     
-    # Start email listener thread
+    # Start email listener thread for database polling
     _listener_running = True
     listener_thread = threading.Thread(target=email_listener, daemon=True)
     listener_thread.start()
-    logger.info("Application startup complete, email listener running")
+    logger.info("Database email listener started")
+    
+    # Start RabbitMQ consumer thread to receive events from other services
+    rabbitmq_thread = threading.Thread(target=start_consumer, daemon=True)
+    rabbitmq_thread.start()
+    logger.info("RabbitMQ consumer started")
+    
+    logger.info("Application startup complete")
     
     yield
     
@@ -151,3 +162,90 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     logger.info(f"User deleted: {user.email}. Email listener will send goodbye email.")
     
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# Get all notifications for a specific user email
+@app.get("/api/notifications/{user_email}", response_model=List[schemas.NotificationResponse])
+def get_user_notifications(user_email: str, db: Session = Depends(get_db)):
+    notifications = db.query(Notification).filter(
+        Notification.user_email == user_email
+    ).order_by(Notification.sent_at.desc()).all()
+    
+    if not notifications:
+        raise HTTPException(status_code=404, detail="No notifications found for this email")
+    
+    return notifications
+
+
+# Get only unread notifications for a user
+@app.get("/api/notifications/{user_email}/unread", response_model=List[schemas.NotificationResponse])
+def get_unread_notifications(user_email: str, db: Session = Depends(get_db)):
+    notifications = db.query(Notification).filter(
+        Notification.user_email == user_email,
+        Notification.is_read == False
+    ).order_by(Notification.sent_at.desc()).all()
+    
+    return notifications
+
+
+# Mark a notification as read or unread
+@app.patch("/api/notifications/{notification_id}", response_model=schemas.NotificationResponse)
+def mark_notification_read(
+    notification_id: int,
+    update: schemas.NotificationMarkRead,
+    db: Session = Depends(get_db)
+):
+    notification = db.query(Notification).filter(
+        Notification.id == notification_id
+    ).first()
+    
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    notification.is_read = update.is_read
+    db.commit()
+    db.refresh(notification)
+    
+    return notification
+
+
+# Check if the service is running and all dependencies are working
+@app.get("/health")
+def health_check():
+    # Check database connection
+    try:
+        db = SessionLocal()
+        db.execute("SELECT 1")
+        db.close()
+        db_status = "healthy"
+    except:
+        db_status = "unhealthy"
+    
+    # Check RabbitMQ connection
+    rabbitmq_status = "healthy" if check_rabbitmq_connection() else "not connected"
+    
+    # Check if SMTP is configured
+    smtp_configured = bool(os.getenv("SMTP_HOST"))
+    
+    return {
+        "status": "healthy" if db_status == "healthy" else "degraded",
+        "database": db_status,
+        "rabbitmq": rabbitmq_status,
+        "smtp_configured": smtp_configured,
+        "email_listener_running": _listener_running
+    }
+
+
+# Get stats about notifications sent
+@app.get("/api/notifications/stats")
+def get_notification_stats(db: Session = Depends(get_db)):
+    total = db.query(Notification).count()
+    unread = db.query(Notification).filter(Notification.is_read == False).count()
+    failed = db.query(Notification).filter(Notification.delivered == False).count()
+    
+    return {
+        "total_notifications": total,
+        "unread_notifications": unread,
+        "failed_deliveries": failed,
+        "success_rate": round((total - failed) / total * 100, 2) if total > 0 else 0
+    }
