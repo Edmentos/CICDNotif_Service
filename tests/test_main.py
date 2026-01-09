@@ -43,9 +43,10 @@ class TestHealthCheck:
     def test_health_check_rabbitmq_down(self, mock_rabbitmq, client):
         mock_rabbitmq.return_value = False
         response = client.get("/health")
-        assert response.status_code == 200
+        assert response.status_code == 503
         data = response.json()
-        assert data["rabbitmq"] == "not connected"
+        assert data["status"] == "unhealthy"
+        assert data["rabbitmq"] == "unhealthy"
     
     @patch('app.main.check_rabbitmq_connection')
     @patch('app.main.SessionLocal')
@@ -57,9 +58,9 @@ class TestHealthCheck:
         mock_rabbitmq.return_value = True
         
         response = client.get("/health")
-        assert response.status_code == 200
+        assert response.status_code == 503
         data = response.json()
-        assert data["status"] == "degraded"
+        assert data["status"] == "unhealthy"
         assert data["database"] == "unhealthy"
     
     @patch.dict('os.environ', {}, clear=True)
