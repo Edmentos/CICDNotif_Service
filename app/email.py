@@ -103,7 +103,7 @@ def send_welcome_email(to_email: str, name: str) -> None:
         logger.info("Sent welcome email to %s", to_email)
         _record_smtp_success()
         
-        # log this email in the database for history
+        # log this email in the database
         db = SessionLocal()
         try:
             notification = Notification(
