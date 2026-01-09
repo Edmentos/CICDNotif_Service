@@ -1,9 +1,10 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 import threading
 import logging
 import os
+from sqlalchemy import text
 
 from app.database import engine, SessionLocal
 from app.models import Base
@@ -44,24 +45,38 @@ app.add_middleware(
 
 # basic health endpoint to check if everything's running
 @app.get("/health")
-def health_check():
+def health_check(response: Response):
+    health_issues = []
+    
     # try connecting to db
     try:
         db = SessionLocal()
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db.close()
         db_status = "healthy"
-    except:
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
         db_status = "unhealthy"
+        health_issues.append("database")
     
     # check rabbitmq
-    rabbitmq_status = "healthy" if check_rabbitmq_connection() else "not connected"
+    rabbitmq_connected = check_rabbitmq_connection()
+    rabbitmq_status = "healthy" if rabbitmq_connected else "unhealthy"
+    if not rabbitmq_connected:
+        health_issues.append("rabbitmq")
     
     # see if smtp env vars are set
     smtp_configured = bool(os.getenv("SMTP_HOST"))
     
+    # determine overall health
+    is_healthy = len(health_issues) == 0
+    
+    # set http status code based on health
+    if not is_healthy:
+        response.status_code = 503
+    
     return {
-        "status": "healthy" if db_status == "healthy" else "degraded",
+        "status": "healthy" if is_healthy else "unhealthy",
         "database": db_status,
         "rabbitmq": rabbitmq_status,
         "smtp_configured": smtp_configured
