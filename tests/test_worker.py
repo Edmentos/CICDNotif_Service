@@ -212,7 +212,8 @@ class TestStartConsumer:
         start_consumer()
         
         mock_channel.start_consuming.assert_called_once()
-    time.sleep')
+    
+    @patch('app.worker.time.sleep')
     @patch('app.worker.get_rabbitmq_connection')
     def test_start_consumer_exception(self, mock_get_conn, mock_sleep):
         """Test consumer handling general exception"""
