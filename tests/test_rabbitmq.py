@@ -4,6 +4,16 @@ import pika
 import os
 
 
+@pytest.fixture(autouse=True)
+def reset_circuit_breaker():
+    """Reset RabbitMQ circuit breaker state before each test"""
+    from app import rabbitmq
+    rabbitmq._rabbitmq_circuit_breaker['failures'] = 0
+    rabbitmq._rabbitmq_circuit_breaker['last_failure_time'] = None
+    rabbitmq._rabbitmq_circuit_breaker['state'] = 'closed'
+    yield
+
+
 class TestRabbitMQConnection:
     """Test RabbitMQ connection functions"""
     
