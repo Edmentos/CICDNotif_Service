@@ -232,11 +232,10 @@ class TestStartConsumer:
         
         # Should try 10 times before giving up
         assert mock_channel.start_consuming.call_count == 10
-        mock_channel.sttime.sleep')
+    
+    @patch('app.worker.time.sleep')
     @patch('app.worker.get_rabbitmq_connection')
-    def test_start_consumer_callback_registration(self, mock_get_conn, mock_sleep
-    @patch('app.worker.get_rabbitmq_connection')
-    def test_start_consumer_callback_registration(self, mock_get_conn):
+    def test_start_consumer_callback_registration(self, mock_get_conn, mock_sleep):
         """Test that callback is properly registered"""
         from app.worker import start_consumer, callback
         
@@ -253,10 +252,10 @@ class TestStartConsumer:
         call_args = mock_channel.basic_consume.call_args
         assert call_args[1]['queue'] == 'notification_queue'
         assert call_args[1]['on_message_callback'] == callback
-    time.sleep')
+    
+    @patch('app.worker.time.sleep')
     @patch('app.worker.get_rabbitmq_connection')
-    def test_start_consumer_channel_setup(self, mock_get_conn, mock_sleep
-    def test_start_consumer_channel_setup(self, mock_get_conn):
+    def test_start_consumer_channel_setup(self, mock_get_conn, mock_sleep):
         """Test that channel is properly configured"""
         from app.worker import start_consumer
         
