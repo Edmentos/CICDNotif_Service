@@ -103,7 +103,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository_owner }}/cicdnotif_service
           tags: |
             type=ref,event=branch
             type=sha,prefix=sha-
@@ -155,7 +155,7 @@ jobs:
             -e SMTP_FROM="${{ secrets.SMTP_FROM }}" \
             -e SMTP_USE_SSL=true \
             -e SMTP_STARTTLS=false \
-            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository_owner }}/cicdnotif_service:latest
           
           echo "Waiting for API to start..."
           sleep 15
