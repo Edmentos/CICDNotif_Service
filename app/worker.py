@@ -9,10 +9,10 @@ from app.models import Notification
 logger = logging.getLogger(__name__)
 
 
-# This runs when we receive a message from RabbitMQ
+# gets called whenever we receive a message from rabbitmq
 def callback(ch, method, properties, body):
     try:
-        # Parse the JSON message
+        # parse json from message body
         event = json.loads(body)
         event_type = event.get('type')
         email = event.get('email')
@@ -20,7 +20,7 @@ def callback(ch, method, properties, body):
         
         logger.info(f"Received event: {event_type} for {email}")
         
-        # Send the right email based on event type
+        # figure out which email to send
         if event_type == 'user.created':
             send_welcome_email(email, name)
         elif event_type == 'user.deleted':
@@ -28,16 +28,16 @@ def callback(ch, method, properties, body):
         else:
             logger.warning(f"Unknown event type: {event_type}")
         
-        # Tell RabbitMQ we processed the message successfully
+        # tell rabbitmq we're done with this message
         ch.basic_ack(delivery_tag=method.delivery_tag)
         
     except Exception as e:
         logger.error(f"Error processing message: {e}")
-        # Don't requeue the message if it failed - send to dead letter queue instead
+        # don't retry if it failed, just drop it
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 
-# Starts listening to the notification queue
+# start listening for messages on the queue
 def start_consumer():
     logger.info("Starting RabbitMQ consumer...")
     
@@ -49,13 +49,13 @@ def start_consumer():
             
         channel = connection.channel()
         
-        # Make sure the queue exists and will survive server restarts
+        # make sure queue exists (durable = survives restarts)
         channel.queue_declare(queue='notification_queue', durable=True)
         
-        # Only process one message at a time
+        # don't grab more than 1 message at a time
         channel.basic_qos(prefetch_count=1)
         
-        # Start consuming messages
+        # start listening
         channel.basic_consume(
             queue='notification_queue',
             on_message_callback=callback

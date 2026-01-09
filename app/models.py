@@ -7,7 +7,7 @@ class Base(DeclarativeBase):
     pass
 
 
-# Stores all notifications sent to users for audit trail and history
+# keeps track of all emails sent for logging/history
 class Notification(Base):
     __tablename__ = "notifications"
 
@@ -17,6 +17,6 @@ class Notification(Base):
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    is_read: Mapped[bool] = mapped_column(Boolean, default=False)  # user can mark as read
-    delivered: Mapped[bool] = mapped_column(Boolean, default=False)  # true if email sent successfully
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    delivered: Mapped[bool] = mapped_column(Boolean, default=False)  # did smtp actually work
 

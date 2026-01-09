@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables
+    # setup DB tables on startup
     Base.metadata.create_all(bind=engine)
     
-    # Start RabbitMQ consumer thread to receive events from other services
+    # spin up background thread to listen for rabbitmq messages
     rabbitmq_thread = threading.Thread(target=start_consumer, daemon=True)
     rabbitmq_thread.start()
     logger.info("RabbitMQ consumer started")
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# CORS middleware
+# allow cors for frontend requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  
@@ -42,10 +42,10 @@ app.add_middleware(
 )
 
 
-# Health check endpoint for monitoring and container health checks
+# basic health endpoint to check if everything's running
 @app.get("/health")
 def health_check():
-    # Check database connection
+    # try connecting to db
     try:
         db = SessionLocal()
         db.execute("SELECT 1")
@@ -54,10 +54,10 @@ def health_check():
     except:
         db_status = "unhealthy"
     
-    # Check RabbitMQ connection
+    # check rabbitmq
     rabbitmq_status = "healthy" if check_rabbitmq_connection() else "not connected"
     
-    # Check if SMTP is configured
+    # see if smtp env vars are set
     smtp_configured = bool(os.getenv("SMTP_HOST"))
     
     return {

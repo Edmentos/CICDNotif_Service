@@ -5,20 +5,21 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-# Circuit breaker for RabbitMQ
+# circuit breaker to avoid hammering rabbitmq if it's down
 _rabbitmq_circuit_breaker = {
     'failures': 0,
     'last_failure_time': None,
     'state': 'closed',  # closed, open, half_open
     'failure_threshold': 3,
-    'timeout': 30  # seconds before trying again
+    'timeout': 30  # wait 30s before trying again
 }
 
 def _check_rabbitmq_circuit():
-    """Check if circuit breaker allows RabbitMQ operations"""
+    """check if we can try connecting to rabbitmq"""
     cb = _rabbitmq_circuit_breaker
     
     if cb['state'] == 'open':
+        # see if timeout expired
         if cb['last_failure_time'] and \
            (datetime.now() - cb['last_failure_time']).total_seconds() > cb['timeout']:
             cb['state'] = 'half_open'
@@ -29,7 +30,7 @@ def _check_rabbitmq_circuit():
     return True
 
 def _record_rabbitmq_success():
-    """Record successful RabbitMQ operation"""
+    """reset circuit after successful connection"""
     cb = _rabbitmq_circuit_breaker
     if cb['state'] == 'half_open':
         logger.info("RabbitMQ circuit breaker closing after successful operation")
@@ -38,7 +39,7 @@ def _record_rabbitmq_success():
     cb['last_failure_time'] = None
 
 def _record_rabbitmq_failure():
-    """Record failed RabbitMQ operation"""
+    """track failures and open circuit if too many"""
     cb = _rabbitmq_circuit_breaker
     cb['failures'] += 1
     cb['last_failure_time'] = datetime.now()
@@ -49,15 +50,15 @@ def _record_rabbitmq_failure():
         cb['state'] = 'open'
 
 
-# Connects to RabbitMQ server using URL or individual credentials
+# connect to rabbitmq using either URL or individual params
 def get_rabbitmq_connection():
-    # Check circuit breaker
+    # check circuit breaker
     if not _check_rabbitmq_circuit():
         logger.warning("RabbitMQ circuit breaker is open; connection attempt blocked")
         return None
     
     try:
-        # Try using connection URL first (cleaner)
+        # try URL first if it exists
         rabbitmq_url = os.getenv('RABBITMQ_URL')
         
         if rabbitmq_url:
@@ -69,7 +70,7 @@ def get_rabbitmq_connection():
             _record_rabbitmq_success()
             return connection
         
-        # Fall back to individual parameters
+        # no URL set, use individual params instead
         credentials = pika.PlainCredentials(
             os.getenv('RABBITMQ_USER', 'guest'),
             os.getenv('RABBITMQ_PASSWORD', 'guest')
@@ -92,7 +93,7 @@ def get_rabbitmq_connection():
         return None
 
 
-# Checks if we can connect to RabbitMQ
+# quick health check to see if rabbitmq is reachable
 def check_rabbitmq_connection():
     try:
         connection = get_rabbitmq_connection()
