@@ -148,20 +148,23 @@ class TestWorkerCallback:
 class TestStartConsumer:
     """Test start_consumer function"""
     
+    @patch('app.worker.time.sleep')
     @patch('app.worker.get_rabbitmq_connection')
-    def test_start_consumer_no_connection(self, mock_get_conn):
+    def test_start_consumer_no_connection(self, mock_get_conn, mock_sleep):
         """Test start_consumer when connection fails"""
         from app.worker import start_consumer
         
         mock_get_conn.return_value = None
         
-        # Should return without error
+        # Should return without error after max retries
         start_consumer()
         
-        mock_get_conn.assert_called_once()
+        # Should attempt connection 10 times (max_retries)
+        assert mock_get_conn.call_count == 10
     
+    @patch('app.worker.time.sleep')
     @patch('app.worker.get_rabbitmq_connection')
-    def test_start_consumer_success(self, mock_get_conn):
+    def test_start_consumer_success(self, mock_get_conn, mock_sleep):
         """Test successful consumer start"""
         from app.worker import start_consumer
         
@@ -191,8 +194,9 @@ class TestStartConsumer:
         # Verify consuming started
         mock_channel.start_consuming.assert_called_once()
     
+    @patch('app.worker.time.sleep')
     @patch('app.worker.get_rabbitmq_connection')
-    def test_start_consumer_keyboard_interrupt(self, mock_get_conn):
+    def test_start_consumer_keyboard_interrupt(self, mock_get_conn, mock_sleep):
         """Test consumer handling KeyboardInterrupt"""
         from app.worker import start_consumer
         
@@ -208,9 +212,9 @@ class TestStartConsumer:
         start_consumer()
         
         mock_channel.start_consuming.assert_called_once()
-    
+    time.sleep')
     @patch('app.worker.get_rabbitmq_connection')
-    def test_start_consumer_exception(self, mock_get_conn):
+    def test_start_consumer_exception(self, mock_get_conn, mock_sleep):
         """Test consumer handling general exception"""
         from app.worker import start_consumer
         
@@ -225,8 +229,11 @@ class TestStartConsumer:
         # Should handle exception gracefully
         start_consumer()
         
-        mock_channel.start_consuming.assert_called_once()
-    
+        # Should try 10 times before giving up
+        assert mock_channel.start_consuming.call_count == 10
+        mock_channel.sttime.sleep')
+    @patch('app.worker.get_rabbitmq_connection')
+    def test_start_consumer_callback_registration(self, mock_get_conn, mock_sleep
     @patch('app.worker.get_rabbitmq_connection')
     def test_start_consumer_callback_registration(self, mock_get_conn):
         """Test that callback is properly registered"""
@@ -245,8 +252,9 @@ class TestStartConsumer:
         call_args = mock_channel.basic_consume.call_args
         assert call_args[1]['queue'] == 'notification_queue'
         assert call_args[1]['on_message_callback'] == callback
-    
+    time.sleep')
     @patch('app.worker.get_rabbitmq_connection')
+    def test_start_consumer_channel_setup(self, mock_get_conn, mock_sleep
     def test_start_consumer_channel_setup(self, mock_get_conn):
         """Test that channel is properly configured"""
         from app.worker import start_consumer
