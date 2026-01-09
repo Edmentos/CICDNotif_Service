@@ -28,7 +28,6 @@ def email_listener():
     2. Deleted users without goodbye emails
     Runs continuously and checks every 5 seconds.
     """
-    global _listener_running
     logger.info("Email listener started")
     
     while _listener_running:

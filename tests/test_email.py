@@ -81,7 +81,9 @@ class TestWelcomeEmail:
         'SMTP_HOST': 'smtp.example.com',
         'SMTP_PORT': '25',
         'SMTP_USE_SSL': 'false',
-        'SMTP_STARTTLS': 'false'
+        'SMTP_STARTTLS': 'false',
+        'SMTP_USER': '',
+        'SMTP_PASSWORD': ''
     })
     @patch('app.email.smtplib.SMTP')
     @patch('app.email.SessionLocal')
@@ -290,7 +292,9 @@ class TestGoodbyeEmail:
     @patch.dict('os.environ', {
         'SMTP_HOST': 'smtp.example.com',
         'SMTP_PORT': '25',
-        'SMTP_USE_SSL': 'false'
+        'SMTP_USE_SSL': 'false',
+        'SMTP_USER': '',
+        'SMTP_PASSWORD': ''
     })
     @patch('app.email.smtplib.SMTP')
     @patch('app.email.SessionLocal')
