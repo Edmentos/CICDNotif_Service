@@ -2,25 +2,68 @@ import os
 import logging
 import smtplib
 from email.message import EmailMessage
+from datetime import datetime, timedelta
 from app.database import SessionLocal
 from app.models import Notification
 
 logger = logging.getLogger(__name__)
 
+# circuit breaker to prevent spamming smtp server if it's down
+_smtp_circuit_breaker = {
+    'failures': 0,
+    'last_failure_time': None,
+    'state': 'closed',  # closed, open, half_open
+    'failure_threshold': 5,
+    'timeout': 60  # wait a minute before retrying
+}
+
+def _check_smtp_circuit():
+    """see if we're allowed to send emails right now"""
+    cb = _smtp_circuit_breaker
+    
+    if cb['state'] == 'open':
+        # check if enough time passed to try again
+        if cb['last_failure_time'] and \
+           (datetime.now() - cb['last_failure_time']).total_seconds() > cb['timeout']:
+            cb['state'] = 'half_open'
+            logger.info("SMTP circuit breaker entering half-open state")
+            return True
+        return False
+    
+    return True
+
+def _record_smtp_success():
+    """reset circuit breaker after successful send"""
+    cb = _smtp_circuit_breaker
+    if cb['state'] == 'half_open':
+        logger.info("SMTP circuit breaker closing after successful operation")
+    cb['failures'] = 0
+    cb['state'] = 'closed'
+    cb['last_failure_time'] = None
+
+def _record_smtp_failure():
+    """track failures and open circuit if needed"""
+    cb = _smtp_circuit_breaker
+    cb['failures'] += 1
+    cb['last_failure_time'] = datetime.now()
+    
+    # if we hit threshold, stop trying for a bit
+    if cb['failures'] >= cb['failure_threshold']:
+        if cb['state'] != 'open':
+            logger.warning(f"SMTP circuit breaker opened after {cb['failures']} failures")
+        cb['state'] = 'open'
+
 
 def send_welcome_email(to_email: str, name: str) -> None:
     """
-    Environment variables:
-    - SMTP_HOST
-    - SMTP_PORT
-    - SMTP_USER
-    - SMTP_PASSWORD
-    - SMTP_FROM (optional, defaults to SMTP_USER)
-    - SMTP_USE_SSL (optional, 'true' to use SMTP_SSL)
-    - SMTP_STARTTLS (optional, 'true' to use STARTTLS)
-
-    If SMTP_HOST is not set, this becomes a no-op (only logs).
+    Sends welcome email to new users.
+    Needs SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD env vars.
     """
+    # check if circuit breaker is blocking us
+    if not _check_smtp_circuit():
+        logger.warning("SMTP circuit breaker is open; skipping welcome email to %s", to_email)
+        return
+    
     smtp_host = os.getenv("SMTP_HOST")
     if not smtp_host:
         logger.info("SMTP not configured; skipping welcome email to %s", to_email)
@@ -58,8 +101,9 @@ def send_welcome_email(to_email: str, name: str) -> None:
                     smtp.login(smtp_user, smtp_password)
                 smtp.send_message(msg)
         logger.info("Sent welcome email to %s", to_email)
+        _record_smtp_success()
         
-        # Save notification to database so user can see their email history
+        # log this email in the database
         db = SessionLocal()
         try:
             notification = Notification(
@@ -78,8 +122,9 @@ def send_welcome_email(to_email: str, name: str) -> None:
             
     except Exception as exc:
         logger.exception("Failed to send welcome email to %s: %s", to_email, exc)
+        _record_smtp_failure()
         
-        # Save failed notification
+        # still save to db even if it failed
         db = SessionLocal()
         try:
             notification = Notification(
@@ -97,8 +142,14 @@ def send_welcome_email(to_email: str, name: str) -> None:
 
 def send_goodbye_email(to_email: str, name: str) -> None:
     """
-    Send a goodbye email with a feedback form link when a user is deleted.
+    Sends goodbye email when users delete their account.
+    Includes link to feedback form.
     """
+    # check circuit breaker first
+    if not _check_smtp_circuit():
+        logger.warning("SMTP circuit breaker is open; skipping goodbye email to %s", to_email)
+        return
+    
     smtp_host = os.getenv("SMTP_HOST")
     if not smtp_host:
         logger.info("SMTP not configured; skipping goodbye email to %s", to_email)
@@ -148,8 +199,9 @@ The Docu-Serve Team
                     smtp.login(smtp_user, smtp_password)
                 smtp.send_message(msg)
         logger.info("Sent goodbye email to %s", to_email)
+        _record_smtp_success()
         
-        # Save notification to database
+        # save to db
         db = SessionLocal()
         try:
             notification = Notification(
@@ -168,6 +220,7 @@ The Docu-Serve Team
             
     except Exception as exc:
         logger.exception("Failed to send goodbye email to %s: %s", to_email, exc)
+        _record_smtp_failure()
         
         # Save failed notification
         db = SessionLocal()

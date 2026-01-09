@@ -19,7 +19,7 @@ DELAY = float(os.getenv("DB_RETRY_DELAY", "1.5"))
 
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
-# small retry (harmless for SQLite, useful for Postgres)
+# retry connection a few times (helps with postgres startup lag)
 for _ in range(RETRIES):
     try:
         engine = create_engine(DATABASE_URL, pool_pre_ping=True, echo=SQL_ECHO,
